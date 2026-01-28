@@ -5,4 +5,8 @@ node_modules
 /src/generated/prisma
 dist
 node_modules
+prisma.config.d.ts.map
+prisma.config.js
+prisma.cnfig.js.map
+prisma.config.d.ts
 
