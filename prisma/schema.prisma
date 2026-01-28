@@ -1,0 +1,184 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+//////////////////////
+// ENUMS
+//////////////////////
+
+enum UserRole {
+  DOCTOR
+  EMPLOYEE
+  ADMIN
+  SYSTEM
+}
+
+enum TokenSource {
+  ONLINE
+  WALK_IN
+  FOLLOW_UP
+  EMERGENCY
+}
+
+enum TokenStatus {
+  REQUESTED
+  CONFIRMED
+  WAITLISTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  PAID
+  UNPAID
+  WAIVED
+  REFUNDED
+}
+
+enum EventEntityType {
+  TOKEN
+  SLOT
+  PATIENT
+}
+
+//////////////////////
+// USERS (AUTH)
+//////////////////////
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  role      UserRole
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  doctor   Doctor?
+  employee Employee?
+  events   Event[]   @relation("ActorEvents")
+  tokens   Token[]   @relation("TokenCreator")
+}
+
+//////////////////////
+// DOCTORS
+//////////////////////
+
+model Doctor {
+  id             String   @id
+  specialization String?
+  createdAt      DateTime @default(now())
+
+  user   User      @relation(fields: [id], references: [id])
+  slots  OpdSlot[]
+  tokens Token[]
+}
+
+//////////////////////
+// EMPLOYEES
+//////////////////////
+
+model Employee {
+  id          String   @id
+  department  String?
+  designation String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [id], references: [id])
+}
+
+//////////////////////
+// PATIENTS
+//////////////////////
+
+model Patient {
+  id        String    @id @default(uuid())
+  name      String
+  phone     String?
+  dob       DateTime?
+  createdAt DateTime  @default(now())
+
+  tokens Token[]
+}
+
+//////////////////////
+// OPD SLOTS
+//////////////////////
+
+model OpdSlot {
+  id           String   @id @default(uuid())
+  slotDate     DateTime
+  startTime    DateTime
+  endTime      DateTime
+  hardCapacity Int
+  createdAt    DateTime @default(now())
+
+  doctorId String
+  doctor   Doctor @relation(fields: [doctorId], references: [id])
+
+  tokens Token[]
+
+  @@unique([doctorId, slotDate, startTime])
+}
+
+//////////////////////
+// TOKENS
+//////////////////////
+
+model Token {
+  id             String        @id @default(uuid())
+  source         TokenSource
+  priorityScore  Int
+  sequenceNumber Int?
+  status         TokenStatus
+  paymentStatus  PaymentStatus
+  isEmergency    Boolean       @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  doctorId String
+  doctor   Doctor @relation(fields: [doctorId], references: [id])
+
+  slotId String
+  slot   OpdSlot @relation(fields: [slotId], references: [id])
+
+  createdBy String
+  creator   User   @relation("TokenCreator", fields: [createdBy], references: [id])
+
+  events Event[]
+
+  @@unique([slotId, sequenceNumber])
+}
+
+//////////////////////
+// EVENTS (EVENT SOURCING)
+//////////////////////
+
+model Event {
+  id           String          @id @default(uuid())
+  entityType   EventEntityType
+  entityId     String
+  eventType    String
+  eventPayload Json?
+  createdAt    DateTime        @default(now())
+
+  actorId String?
+  actor   User?   @relation("ActorEvents", fields: [actorId], references: [id])
+  token   Token?  @relation(fields: [tokenId], references: [id])
+  tokenId String?
+}
