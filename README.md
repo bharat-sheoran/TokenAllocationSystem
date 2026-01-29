@@ -75,7 +75,7 @@ The schema is designed to:
 
 ### 📷 Schema Diagram
 
-<!-- ![OPD Token Allocation Schema](docs/opd-schema.png) -->
+![OPD Token Allocation Schema](data_schema.png)
 
 ## 🧱 Core Entities
 
