@@ -77,6 +77,11 @@ The schema is designed to:
 
 ![OPD Token Allocation Schema](data_schema.png)
 
+## 🐳 Docker Deployment
+
+The application is containerized and published on Docker Hub.
+https://hub.docker.com/r/bharatsheoran/opd-token-engine-dev
+
 ## 🧱 Core Entities
 
 ### Doctor
