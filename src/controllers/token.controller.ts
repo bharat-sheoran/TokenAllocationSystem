@@ -20,19 +20,15 @@ import { prisma } from '../repositories/prisma/client.js';
 import type { Token } from 'generated/prisma/client.js';
 
 @JsonController('/tokens')
-@injectable()
 export class TokenController {
-    constructor(
-        @inject(AllocationService)
-        private readonly allocationService: AllocationService
-    ) { }
+    private allocationService = new AllocationService();
+    constructor() { }
 
     /**
      * -------------------------
      * REQUEST / ALLOCATE TOKEN
      * -------------------------
      */
-    @Authorized()
     @Post('/')
     @HttpCode(201)
     async requestToken(
@@ -73,7 +69,6 @@ export class TokenController {
      * CANCEL TOKEN
      * -------------------------
      */
-    @Authorized()
     @Post('/:tokenId/cancel')
     @HttpCode(200)
     async cancelToken(
@@ -90,7 +85,6 @@ export class TokenController {
      * MARK NO-SHOW
      * -------------------------
      */
-    @Authorized()
     @Post('/:tokenId/no-show')
     @HttpCode(200)
     async markNoShow(
@@ -107,7 +101,6 @@ export class TokenController {
      * EMERGENCY TOKEN
      * -------------------------
      */
-    @Authorized()
     @Post('/emergency')
     @HttpCode(201)
     async emergencyToken(
@@ -117,7 +110,7 @@ export class TokenController {
             throw new BadRequestError('Missing required fields');
         }
 
-        return this.allocationService.requestToken({
+        return await this.allocationService.requestToken({
             patient: {
                 name: body.name,
                 phone: body.phone,
@@ -138,7 +131,6 @@ export class TokenController {
      * (For simulation/debug)
      * -------------------------
      */
-    @Authorized()
     @Get('/slot/:slotId')
     @HttpCode(200)
     async getSlotTokens(
@@ -146,7 +138,7 @@ export class TokenController {
     ) {
         if (!slotId) throw new BadRequestError('Slot ID required');
 
-        return prisma.token.findMany({
+        return await prisma.token.findMany({
             where: { slotId },
             orderBy: { sequenceNumber: 'asc' }
         });

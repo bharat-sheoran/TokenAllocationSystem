@@ -9,6 +9,7 @@ import { PatientRepository } from '../repositories/patient.repository.js';
 import { EventRepository } from '../repositories/event.repository.js';
 import { calculatePriority } from '../utils/calculatePriority.js';
 import type { Token } from 'generated/prisma/client.js';
+import { injectable } from 'inversify';
 
 interface RequestTokenInput {
     patient: {
@@ -36,82 +37,80 @@ export class AllocationService {
      * ---------------------------
      */
     async requestToken(input: RequestTokenInput): Promise<Token> {
-        return prisma.$transaction(async () => {
-            // 1. Lock slot
-            await this.slotRepo.lockSlot(input.slotId);
+        // 1. Lock slot
+        await this.slotRepo.lockSlot(input.slotId);
 
-            // 2. Resolve patient
-            let patient = input.patient.phone
-                ? await this.patientRepo.findByPhone(input.patient.phone)
-                : null;
+        // 2. Resolve patient
+        let patient = input.patient.phone
+            ? await this.patientRepo.findByPhone(input.patient.phone)
+            : null;
 
-            if (!patient) {
-                patient = await this.patientRepo.createPatient(input.patient);
-            }
+        if (!patient) {
+            patient = await this.patientRepo.createPatient(input.patient);
+        }
 
-            // 3. Calculate priority
-            const priorityScore = calculatePriority({
-                source: input.source,
-                paymentStatus: input.paymentStatus,
-                isEmergency: input.isEmergency ?? false
-            });
-
-            // 4. Count confirmed tokens
-            const confirmedCount =
-                await this.slotRepo.countConfirmedTokens(input.slotId);
-
-            const slot = await this.slotRepo.getById(input.slotId);
-            if (!slot) throw new Error('Slot not found');
-
-            // 5. Create token in REQUESTED state
-            const token = await this.tokenRepo.createToken({
-                patientId: patient.id,
-                doctorId: input.doctorId,
-                slotId: input.slotId,
-                source: input.source,
-                paymentStatus: input.paymentStatus,
-                priorityScore,
-                isEmergency: !!input.isEmergency,
-                status: TokenStatus.REQUESTED,
-                createdBy: input.requestedBy
-            });
-
-            // 6. Allocation decision
-            if (confirmedCount < slot.hardCapacity) {
-                // CONFIRM directly
-                await this.confirmToken(token.id, confirmedCount + 1);
-            } else {
-                // Slot full → check displacement
-                const lowest =
-                    await this.tokenRepo.findLowestPriorityToken(input.slotId);
-
-                if (
-                    lowest &&
-                    priorityScore > lowest.priorityScore
-                ) {
-                    // Displace lower-priority token
-                    await this.displaceToken(lowest.id);
-                    await this.confirmToken(token.id, slot.hardCapacity);
-                } else {
-                    // WAITLIST
-                    await this.tokenRepo.updateTokenStatus(
-                        token.id,
-                        TokenStatus.WAITLISTED
-                    );
-                }
-            }
-
-            // 7. Emit event
-            await this.eventRepo.appendEvent({
-                entityType: EventEntityType.TOKEN,
-                entityId: token.id,
-                eventType: 'TOKEN_REQUESTED',
-                eventPayload: { source: input.source },
-                actorId: input.requestedBy
-            });
-
-            return token;
+        // 3. Calculate priority
+        const priorityScore = calculatePriority({
+            source: input.source,
+            paymentStatus: input.paymentStatus,
+            isEmergency: input.isEmergency ?? false
         });
+
+        // 4. Count confirmed tokens
+        const confirmedCount =
+            await this.slotRepo.countConfirmedTokens(input.slotId);
+
+        const slot = await this.slotRepo.getById(input.slotId);
+        if (!slot) throw new Error('Slot not found');
+
+        // 5. Create token in REQUESTED state
+        const token = await this.tokenRepo.createToken({
+            patientId: patient.id,
+            doctorId: input.doctorId,
+            slotId: input.slotId,
+            source: input.source,
+            paymentStatus: input.paymentStatus,
+            priorityScore,
+            isEmergency: !!input.isEmergency,
+            status: TokenStatus.REQUESTED,
+            createdBy: input.requestedBy
+        });
+
+        // 6. Allocation decision
+        if (confirmedCount < slot.hardCapacity) {
+            // CONFIRM directly
+            await this.confirmToken(token.id, confirmedCount + 1);
+        } else {
+            // Slot full → check displacement
+            const lowest =
+                await this.tokenRepo.findLowestPriorityToken(input.slotId);
+
+            if (
+                lowest &&
+                priorityScore > lowest.priorityScore
+            ) {
+                // Displace lower-priority token
+                await this.displaceToken(lowest.id);
+                await this.confirmToken(token.id, slot.hardCapacity);
+            } else {
+                // WAITLIST
+                await this.tokenRepo.updateTokenStatus(
+                    token.id,
+                    TokenStatus.WAITLISTED
+                );
+            }
+        }
+
+        // 7. Emit event
+        await this.eventRepo.appendEvent({
+            entityType: EventEntityType.TOKEN,
+            entityId: token.id,
+            eventType: 'TOKEN_REQUESTED',
+            eventPayload: { source: input.source },
+            actorId: input.requestedBy
+        });
+
+        return token;
     }
 
     /**
@@ -149,21 +148,20 @@ export class AllocationService {
      * ---------------------------
      */
     async cancelToken(tokenId: string, actorId: string) {
-        return prisma.$transaction(async () => {
-            await this.tokenRepo.updateTokenStatus(
-                tokenId,
-                TokenStatus.CANCELLED
-            );
 
-            await this.eventRepo.appendEvent({
-                entityType: EventEntityType.TOKEN,
-                entityId: tokenId,
-                eventType: 'TOKEN_CANCELLED',
-                actorId
-            });
+        await this.tokenRepo.updateTokenStatus(
+            tokenId,
+            TokenStatus.CANCELLED
+        );
 
-            await this.promoteFromWaitlist(tokenId);
+        await this.eventRepo.appendEvent({
+            entityType: EventEntityType.TOKEN,
+            entityId: tokenId,
+            eventType: 'TOKEN_CANCELLED',
+            actorId
         });
+
+        await this.promoteFromWaitlist(tokenId);
     }
 
     /**
@@ -172,13 +170,12 @@ export class AllocationService {
      * ---------------------------
      */
     async markNoShow(tokenId: string) {
-        return prisma.$transaction(async () => {
-            await this.tokenRepo.updateTokenStatus(
-                tokenId,
-                TokenStatus.NO_SHOW
-            );
-            await this.promoteFromWaitlist(tokenId);
-        });
+
+        await this.tokenRepo.updateTokenStatus(
+            tokenId,
+            TokenStatus.NO_SHOW
+        );
+        await this.promoteFromWaitlist(tokenId);
     }
 
     /**

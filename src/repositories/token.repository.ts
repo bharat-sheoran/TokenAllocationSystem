@@ -19,7 +19,7 @@ export interface CreateTokenInput {
 
 export class TokenRepository {
     async createToken(data: CreateTokenInput): Promise<Token> {
-        return prisma.token.create({ data });
+        return await prisma.token.create({ data });
     }
 
     async updateTokenStatus(tokenId: string, status: TokenStatus): Promise<void> {
@@ -37,7 +37,7 @@ export class TokenRepository {
     }
 
     async getConfirmedTokensBySlot(slotId: string): Promise<Token[]> {
-        return prisma.token.findMany({
+        return await prisma.token.findMany({
             where: {
                 slotId,
                 status: 'CONFIRMED'
@@ -49,7 +49,7 @@ export class TokenRepository {
     }
 
     async getWaitlistedTokensBySlot(slotId: string): Promise<Token[]> {
-        return prisma.token.findMany({
+        return await prisma.token.findMany({
             where: {
                 slotId,
                 status: TokenStatus.WAITLISTED
@@ -62,7 +62,7 @@ export class TokenRepository {
     }
 
     async findLowestPriorityToken(slotId: string): Promise<Token | null> {
-        return prisma.token.findFirst({
+        return await prisma.token.findFirst({
             where: {
                 slotId,
                 status: 'CONFIRMED'
